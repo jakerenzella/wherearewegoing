@@ -1,26 +1,83 @@
-@import "tailwindcss";
+@import "@heroui/react/styles";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Boarding-pass theme overrides */
+:root,
+.light,
+[data-theme="light"] {
+  --background: oklch(0.965 0.02 80);           /* warm cream paper */
+  --foreground: oklch(0.18 0.005 60);           /* near-black ink */
+  --surface: oklch(0.99 0.004 85);              /* off-white card */
+  --surface-foreground: var(--foreground);
+  --surface-secondary: oklch(0.94 0.015 80);
+  --surface-tertiary: oklch(0.91 0.02 80);
+  --overlay: oklch(0.99 0.004 85);
+  --overlay-foreground: var(--foreground);
+
+  --muted: oklch(0.45 0.015 60);
+
+  --accent: oklch(0.58 0.2 28);                 /* boarding-pass red */
+  --accent-foreground: oklch(0.99 0.004 85);
+
+  --border: oklch(0.18 0.005 60);               /* black borders */
+  --separator: oklch(0.18 0.005 60);
+  --focus: oklch(0.58 0.2 28);
+
+  --default: oklch(0.93 0.02 80);
+  --default-foreground: var(--foreground);
+
+  --field-background: oklch(0.99 0.004 85);
+  --field-foreground: var(--foreground);
+  --field-border: oklch(0.18 0.005 60);
+  --field-border-width: 1.5px;
+
+  --radius: 0.125rem;                           /* sharp corners */
+  --field-radius: 0.125rem;
+  --border-width: 1.5px;
+
+  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
+/* Paper grain background */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background:
+    radial-gradient(circle at 20% 10%, oklch(0.97 0.02 75) 0%, transparent 40%),
+    radial-gradient(circle at 80% 90%, oklch(0.96 0.025 70) 0%, transparent 40%),
+    var(--background);
+}
+
+/* Ticket perforation divider */
+.perforate {
+  background-image: linear-gradient(
+    to right,
+    var(--border) 50%,
+    transparent 50%
+  );
+  background-size: 12px 1.5px;
+  background-repeat: repeat-x;
+  background-position: center;
+  height: 1.5px;
+}
+
+/* Dotted perforation for vertical ticket cuts */
+.perforate-v {
+  background-image: linear-gradient(
+    to bottom,
+    var(--border) 50%,
+    transparent 50%
+  );
+  background-size: 1.5px 12px;
+  background-repeat: repeat-y;
+  background-position: center;
+  width: 1.5px;
+}
+
+/* Uppercase mono label utility */
+.label-mono {
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--muted);
 }
