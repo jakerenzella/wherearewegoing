@@ -36,3 +36,7 @@ ALTER TABLE destination ADD COLUMN IF NOT EXISTS image_url TEXT;
 DELETE FROM vote;
 ALTER TABLE vote DROP CONSTRAINT IF EXISTS vote_voter_id_key;
 ALTER TABLE vote ADD CONSTRAINT vote_voter_destination_unique UNIQUE (voter_id, destination_id);
+
+-- Migration: instant-runoff voting (ranked preferences)
+ALTER TABLE vote ADD COLUMN IF NOT EXISTS rank INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE vote ADD CONSTRAINT vote_voter_rank_unique UNIQUE (voter_id, rank);

@@ -29,7 +29,7 @@ export type AdminBallot = {
   voter_id: string;
   voter_name: string | null;
   submitted_at: string;
-  approvals: Array<{ name: string; flag: string | null }>;
+  rankings: Array<{ name: string; flag: string | null; rank: number }>;
 };
 
 export async function adminListBallots(): Promise<AdminBallot[]> {
@@ -40,11 +40,11 @@ export async function adminListBallots(): Promise<AdminBallot[]> {
       d_self.user_name AS voter_name,
       COALESCE(
         json_agg(
-          json_build_object('name', d.name, 'flag', d.flag)
-          ORDER BY d.created_at
+          json_build_object('name', d.name, 'flag', d.flag, 'rank', v.rank)
+          ORDER BY v.rank ASC
         ) FILTER (WHERE d.id IS NOT NULL),
         '[]'::json
-      ) AS approvals
+      ) AS rankings
     FROM ballot b
     LEFT JOIN destination d_self ON d_self.user_id = b.voter_id
     LEFT JOIN vote v ON v.voter_id = b.voter_id

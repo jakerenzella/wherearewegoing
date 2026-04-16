@@ -19,6 +19,17 @@ type Destination = {
   voteCount: number | null;
 };
 
+type IRVRound = {
+  round: number;
+  tallies: Record<string, number>;
+  eliminated: string | null;
+};
+
+type IRVResult = {
+  winnerId: string;
+  rounds: IRVRound[];
+};
+
 type State = {
   phase: Phase;
   total: number;
@@ -32,8 +43,9 @@ type State = {
     imageUrl: string | null;
     description: string | null;
   } | null;
-  myApprovals: string[];
+  myRankings: string[];
   myBallotSubmitted: boolean;
+  irvResult: IRVResult | null;
 };
 
 export function Trip() {
@@ -362,23 +374,30 @@ function SubmitPanel({ state, reload }: { state: State; reload: () => void }) {
   );
 }
 
-/* -------------------- vote (approval) -------------------- */
+/* -------------------- vote (preferential / IRV) -------------------- */
 
 function VotePanel({ state, reload }: { state: State; reload: () => void }) {
-  const initial = new Set(state.myApprovals);
-  const [approvals, setApprovals] = useState<Set<string>>(initial);
+  const [rankings, setRankings] = useState<string[]>(state.myRankings);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const submitted = state.myBallotSubmitted;
   const options = state.destinations.filter((d) => !d.isMine);
 
-  function toggle(id: string) {
+  function getRank(id: string): number {
+    const idx = rankings.indexOf(id);
+    return idx === -1 ? -1 : idx + 1;
+  }
+
+  function toggleRank(id: string) {
     if (submitted) return;
-    setApprovals((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+    setRankings((prev) => {
+      const idx = prev.indexOf(id);
+      if (idx !== -1) {
+        // Remove from rankings
+        return prev.filter((r) => r !== id);
+      }
+      // Add at next position
+      return [...prev, id];
     });
   }
 
@@ -388,7 +407,7 @@ function VotePanel({ state, reload }: { state: State; reload: () => void }) {
     const res = await fetch("/api/ballot", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ approvals: [...approvals] }),
+      body: JSON.stringify({ rankings }),
     });
     setSubmitting(false);
     if (!res.ok) {
@@ -399,18 +418,36 @@ function VotePanel({ state, reload }: { state: State; reload: () => void }) {
     reload();
   }
 
+  // Sort: ranked destinations first (by rank), then unranked
+  const ranked = rankings
+    .map((id) => options.find((d) => d.id === id))
+    .filter((d): d is Destination => d != null);
+  const unranked = options.filter((d) => !rankings.includes(d.id));
+  const allComplete = rankings.length === options.length;
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex items-end justify-between">
         <div className="flex flex-col gap-1">
-          <span className="label-mono">Approval voting</span>
+          <span className="label-mono">Preferential voting</span>
           <h2 className="text-xl font-bold uppercase tracking-tight">
-            Tick anywhere you'd be happy
+            Number your preferences
           </h2>
         </div>
         <span className="label-mono">
           {state.ballotsCount}/{state.total} in
         </span>
+      </div>
+
+      <div
+        className="border-1.5 border-foreground bg-surface-secondary/50 px-4 py-3"
+        style={{ borderWidth: "1.5px" }}
+      >
+        <p className="font-mono uppercase text-xs tracking-wider">
+          Tap destinations in order of preference — 1 is your first choice.
+          {!submitted && " Tap a ranked destination to remove it."}
+          {" "}You must number every box for your vote to count.
+        </p>
       </div>
 
       {submitted && (
@@ -427,14 +464,75 @@ function VotePanel({ state, reload }: { state: State; reload: () => void }) {
         </p>
       )}
 
-      <div className="flex flex-col gap-5">
-        {options.map((d) => {
-          const isApproved = approvals.has(d.id);
-          return (
-            <Ticket
-              key={d.id}
-              className={isApproved ? "shadow-[6px_6px_0_var(--accent)]" : ""}
-            >
+      {/* Ranked destinations */}
+      {ranked.length > 0 && (
+        <div className="flex flex-col gap-4">
+          {ranked.map((d) => {
+            const rank = getRank(d.id);
+            return (
+              <Ticket
+                key={d.id}
+                className="shadow-[6px_6px_0_var(--accent)]"
+              >
+                <div className="flex">
+                  <div
+                    className="flex-shrink-0 flex items-center justify-center bg-accent text-accent-foreground border-r-1.5 border-foreground"
+                    style={{ borderRightWidth: "1.5px", width: "64px" }}
+                  >
+                    <span className="text-3xl font-bold font-mono">{rank}</span>
+                  </div>
+                  <div className="flex-1">
+                    <HeroImage
+                      src={d.imageUrl}
+                      alt={d.name ?? ""}
+                      fallback={d.flag}
+                      height={140}
+                    />
+                  </div>
+                </div>
+                <div
+                  className="p-5 flex flex-col gap-2 border-t-1.5 border-foreground"
+                  style={{ borderTopWidth: "1.5px" }}
+                >
+                  <span className="label-mono">Preference {rank}</span>
+                  <h3 className="text-2xl font-bold uppercase tracking-tight leading-none">
+                    <FlagName flag={d.flag} name={d.name} />
+                  </h3>
+                  {d.description && (
+                    <p className="text-sm mt-1 whitespace-pre-wrap">
+                      {d.description}
+                    </p>
+                  )}
+                </div>
+                {!submitted && (
+                  <>
+                    <div className="perforate mx-5" />
+                    <div className="p-4">
+                      <button
+                        type="button"
+                        onClick={() => toggleRank(d.id)}
+                        className="w-full p-3 border-1.5 border-foreground font-mono uppercase tracking-widest text-xs font-bold bg-accent text-accent-foreground hover:opacity-80 transition-opacity"
+                        style={{ borderWidth: "1.5px" }}
+                      >
+                        ✓ Preference {rank} — tap to remove
+                      </button>
+                    </div>
+                  </>
+                )}
+              </Ticket>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Unranked destinations */}
+      {unranked.length > 0 && !submitted && (
+        <div className="flex flex-col gap-4">
+          {ranked.length > 0 && (
+            <span className="label-mono">Remaining destinations</span>
+          )}
+          {unranked.map((d) => (
+            <Ticket key={d.id}>
               <HeroImage
                 src={d.imageUrl}
                 alt={d.name ?? ""}
@@ -459,22 +557,17 @@ function VotePanel({ state, reload }: { state: State; reload: () => void }) {
               <div className="p-4">
                 <button
                   type="button"
-                  onClick={() => toggle(d.id)}
-                  disabled={submitted}
-                  className={`w-full p-3 border-1.5 border-foreground font-mono uppercase tracking-widest text-xs font-bold transition-colors ${
-                    isApproved
-                      ? "bg-accent text-accent-foreground"
-                      : "bg-surface hover:bg-surface-secondary"
-                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  onClick={() => toggleRank(d.id)}
+                  className="w-full p-3 border-1.5 border-foreground font-mono uppercase tracking-widest text-xs font-bold bg-surface hover:bg-surface-secondary transition-colors"
                   style={{ borderWidth: "1.5px" }}
                 >
-                  {isApproved ? "✓ Approved" : "○ Approve"}
+                  ○ Tap to rank #{rankings.length + 1}
                 </button>
               </div>
             </Ticket>
-          );
-        })}
-      </div>
+          ))}
+        </div>
+      )}
 
       {!submitted && (
         <div className="sticky bottom-0 pt-4">
@@ -483,13 +576,14 @@ function VotePanel({ state, reload }: { state: State; reload: () => void }) {
               <div className="flex flex-col">
                 <span className="label-mono">Your ballot</span>
                 <span className="font-bold uppercase tracking-tight">
-                  {approvals.size} approval{approvals.size === 1 ? "" : "s"}
+                  {rankings.length}/{options.length} ranked
                 </span>
               </div>
               <Button
                 variant="primary"
                 onPress={submitBallot}
                 isPending={submitting}
+                isDisabled={!allComplete}
               >
                 Submit ballot
               </Button>
@@ -501,15 +595,31 @@ function VotePanel({ state, reload }: { state: State; reload: () => void }) {
   );
 }
 
-/* -------------------- reveal -------------------- */
+/* -------------------- reveal (IRV results) -------------------- */
 
 function RevealPanel({ state }: { state: State }) {
-  const sorted = [...state.destinations].sort(
-    (a, b) => (b.voteCount ?? 0) - (a.voteCount ?? 0),
-  );
-  const winner = sorted[0];
+  const irv = state.irvResult;
+  if (!irv) return null;
+
+  const destMap = new Map(state.destinations.map((d) => [d.id, d]));
+  const winner = destMap.get(irv.winnerId);
   if (!winner) return null;
-  const rest = sorted.slice(1);
+
+  // Build elimination order from rounds
+  const eliminated = irv.rounds
+    .filter((r) => r.eliminated)
+    .map((r) => r.eliminated!);
+  const rest = eliminated
+    .map((id) => destMap.get(id))
+    .filter((d): d is Destination => d != null)
+    .reverse(); // show last-eliminated (closest to winning) first
+
+  // Final round tallies for the winner
+  const finalRound = irv.rounds[irv.rounds.length - 1];
+  const winnerFinalVotes = finalRound?.tallies[irv.winnerId] ?? 0;
+  const totalFinalVotes = finalRound
+    ? Object.values(finalRound.tallies).reduce((a, b) => a + b, 0)
+    : 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -537,8 +647,8 @@ function RevealPanel({ state }: { state: State }) {
             <FlagName flag={winner.flag} name={winner.name} />
           </h2>
           <span className="label-mono mt-1">
-            Pitched by {winner.userName} · {winner.voteCount} approval
-            {winner.voteCount === 1 ? "" : "s"}
+            Pitched by {winner.userName} · won in round {irv.rounds.length} with{" "}
+            {winnerFinalVotes}/{totalFinalVotes} votes
           </span>
         </div>
         {winner.description && (
@@ -551,6 +661,96 @@ function RevealPanel({ state }: { state: State }) {
         )}
       </Ticket>
 
+      {/* IRV Rounds breakdown */}
+      <Ticket>
+        <div
+          className="p-5 border-b-1.5 border-foreground"
+          style={{ borderBottomWidth: "1.5px" }}
+        >
+          <span className="label-mono">How preferences flowed</span>
+          <h3 className="text-lg font-bold uppercase tracking-tight mt-1">
+            Count breakdown
+          </h3>
+        </div>
+        <div className="divide-y divide-foreground" style={{ borderColor: "inherit" }}>
+          {irv.rounds.map((round) => {
+            const sortedTallies = Object.entries(round.tallies).sort(
+              ([, a], [, b]) => b - a,
+            );
+            const roundTotal = Object.values(round.tallies).reduce((a, b) => a + b, 0);
+            return (
+              <div key={round.round} className="p-4 flex flex-col gap-2">
+                <div className="flex items-baseline justify-between">
+                  <span className="font-mono uppercase text-xs font-bold tracking-wider">
+                    Round {round.round}
+                  </span>
+                  {round.eliminated && (
+                    <span className="label-mono text-danger">
+                      ✕ Eliminated:{" "}
+                      {(() => {
+                        const d = destMap.get(round.eliminated);
+                        return d ? (
+                          <FlagName flag={d.flag} name={d.name} />
+                        ) : (
+                          "Unknown"
+                        );
+                      })()}
+                    </span>
+                  )}
+                  {!round.eliminated && (
+                    <span className="label-mono text-success">
+                      ★ Winner declared
+                    </span>
+                  )}
+                </div>
+                <div className="flex flex-col gap-1">
+                  {sortedTallies.map(([id, count]) => {
+                    const d = destMap.get(id);
+                    const pct = roundTotal > 0 ? (count / roundTotal) * 100 : 0;
+                    const isWinner = !round.eliminated && id === irv.winnerId;
+                    const isEliminated = id === round.eliminated;
+                    return (
+                      <div key={id} className="flex items-center gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-baseline justify-between gap-2">
+                            <span
+                              className={`font-mono uppercase text-xs tracking-wider truncate ${
+                                isEliminated ? "line-through text-muted" : ""
+                              } ${isWinner ? "font-bold" : ""}`}
+                            >
+                              {d?.flag && (
+                                <span className="mr-1">{d.flag}</span>
+                              )}
+                              {d?.name ?? id}
+                            </span>
+                            <span className="font-mono text-xs whitespace-nowrap">
+                              {count} ({pct.toFixed(0)}%)
+                            </span>
+                          </div>
+                          <div className="h-1.5 bg-surface-secondary mt-0.5 overflow-hidden">
+                            <div
+                              className={`h-full transition-all ${
+                                isWinner
+                                  ? "bg-accent"
+                                  : isEliminated
+                                  ? "bg-danger/50"
+                                  : "bg-foreground/30"
+                              }`}
+                              style={{ width: `${pct}%` }}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </Ticket>
+
+      {/* Also-rans */}
       {rest.length > 0 && (
         <div className="flex flex-col gap-4">
           <span className="label-mono">Also on the manifest</span>
@@ -581,7 +781,7 @@ function RevealPanel({ state }: { state: State }) {
                   style={{ borderLeftWidth: "1.5px" }}
                 >
                   <span className="font-mono uppercase text-xs font-bold tracking-wider whitespace-nowrap">
-                    {d.voteCount}
+                    Elim. R{eliminated.indexOf(d.id) + 1}
                   </span>
                 </div>
               </div>

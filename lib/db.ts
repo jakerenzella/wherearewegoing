@@ -43,9 +43,9 @@ export async function hasSubmittedBallot(voterId: string): Promise<boolean> {
   return rows.length > 0;
 }
 
-export async function getMyApprovals(voterId: string): Promise<string[]> {
+export async function getMyRankings(voterId: string): Promise<string[]> {
   const rows = await sql`
-    SELECT destination_id FROM vote WHERE voter_id = ${voterId}
+    SELECT destination_id FROM vote WHERE voter_id = ${voterId} ORDER BY rank ASC
   `;
   return (rows as Array<{ destination_id: string }>).map((r) => r.destination_id);
 }
@@ -87,14 +87,16 @@ export async function listDestinationIds(): Promise<Array<{ id: string; user_id:
 
 export async function submitBallot(
   voterId: string,
-  destinationIds: string[],
+  rankedDestinationIds: string[],
 ): Promise<void> {
-  // Replace existing approvals — wipe and re-insert. Then mark ballot as submitted.
+  // Replace existing rankings — wipe and re-insert. Then mark ballot as submitted.
   await sql`DELETE FROM vote WHERE voter_id = ${voterId}`;
-  for (const destinationId of destinationIds) {
+  for (let i = 0; i < rankedDestinationIds.length; i++) {
+    const destinationId = rankedDestinationIds[i];
+    const rank = i + 1;
     await sql`
-      INSERT INTO vote (voter_id, destination_id)
-      VALUES (${voterId}, ${destinationId})
+      INSERT INTO vote (voter_id, destination_id, rank)
+      VALUES (${voterId}, ${destinationId}, ${rank})
       ON CONFLICT (voter_id, destination_id) DO NOTHING
     `;
   }
@@ -103,4 +105,17 @@ export async function submitBallot(
     VALUES (${voterId})
     ON CONFLICT (voter_id) DO UPDATE SET submitted_at = NOW()
   `;
+}
+
+export type RankedVote = {
+  voter_id: string;
+  destination_id: string;
+  rank: number;
+};
+
+export async function getAllRankings(): Promise<RankedVote[]> {
+  const rows = await sql`
+    SELECT voter_id, destination_id, rank FROM vote ORDER BY voter_id, rank ASC
+  `;
+  return rows as RankedVote[];
 }

@@ -157,7 +157,7 @@ export default async function AdminPage() {
                     {d.name}
                   </span>
                   <span className="label-mono whitespace-nowrap">
-                    {d.vote_count} approval{d.vote_count === 1 ? "" : "s"}
+                    {d.vote_count} first pref{d.vote_count === 1 ? "" : "s"}
                   </span>
                 </div>
                 <span className="label-mono">
@@ -207,20 +207,21 @@ export default async function AdminPage() {
                   {formatDate(b.submitted_at)}
                 </span>
               </div>
-              {b.approvals.length === 0 ? (
+              {b.rankings.length === 0 ? (
                 <span className="label-mono text-muted">
-                  Approved: none (abstained)
+                  No preferences recorded
                 </span>
               ) : (
                 <div className="flex flex-wrap gap-2">
-                  {b.approvals.map((a, idx) => (
+                  {b.rankings.map((r, idx) => (
                     <span
                       key={idx}
                       className="border-1.5 border-foreground px-2 py-1 label-mono"
                       style={{ borderWidth: "1.5px" }}
                     >
-                      {a.flag && <span className="mr-1">{a.flag}</span>}
-                      {a.name}
+                      <span className="font-bold mr-1">{r.rank}.</span>
+                      {r.flag && <span className="mr-1">{r.flag}</span>}
+                      {r.name}
                     </span>
                   ))}
                 </div>
